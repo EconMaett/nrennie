@@ -1,0 +1,114 @@
+---
+title: "Modelling lemur weights with R and Python"
+author: "Nicola Rennie"
+format: 
+  revealjs:
+    embed-resources: true
+---
+
+## Combining R and Python with `{reticulate}` and Quarto
+
+Quarto enables you to weave together content and executable code into a finished presentation. To learn more about Quarto presentations see <https://quarto.org/docs/presentations/>.
+
+### Read the data
+
+We start off with an R code block that reads in the data: 
+
+```{r}
+#| label: read-data
+#| echo: true
+#| message: false
+#| cache: true
+lemurs <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-08-24/lemur_data.csv")
+```
+
+We've set four options for the code block: (i) labelled the code block with `label: read-data`, (ii) set `echo: true` to make the code show the output in the rendered script, (iii) set `message: false` to make sure the messages from `readr::read_csv()` don't show up in the output, and (iv) set `cache: true`to cache the reading in of the data since the data set is reasonably large.
+
+Now, we can include a second R code block to perform some data wrangling:
+
+```{r}
+#| label: wrangling
+#| echo: true
+#| message: false
+#| output-location: slide
+library(dplyr)
+library(knitr)
+lemur_data <- lemurs |> 
+  filter(taxon == "ECOL", sex == "M", age_category == "adult") |> 
+  select(c(age_at_wt_mo, weight_g)) |> 
+  rename(Age = age_at_wt_mo, Weight = weight_g)
+
+kable(head(lemur_data))
+```
+
+Here, we've selected only adult male collared brown lemurs, and chosen only the columns we want to model: age and weight. Setting `output-location: slide` puts the table we generate onto the following slide (since the code takes up most of the space on the slide).
+
+So far, this has been pretty standard. It's just some R code in a Quarto document. Now, we can add a Python code block to fit a model:
+
+```{python}
+#| label: modelling
+#| echo: true
+#| message: false
+lemur_data_py = r.lemur_data
+
+import statsmodels.api as sm
+y = lemur_data_py[["Weight"]]
+x = lemur_data_py[["Age"]]
+x = sm.add_constant(x)
+mod = sm.OLS(y, x).fit()
+lemur_data_py["Predicted"] = mod.predict(x)
+lemur_data_py["Residuals"] = mod.resid
+```
+
+The key part here is the `.r` on line 4 - this tells {reticulate} to look in the R code for an object called `lemur_data`. You can think of this line as importing your data from R to Python. Other than that, it's standard Python code. Here we fit a simple linear model:
+
+$$ weight_{i} = \beta_{0} + \beta_{1} age_{i} + e_{i} $$
+Obviously, R has the capabilities to fit a linear model, and for this very simple example there is no need to use Python. However, this illustrates how you might approach the problem, if you find yourself needing to use a particular library or model that you can only find in Python.
+
+After we've fitted any type of model, we need to check its output. For linear regression, one of the most common model inspection is to plot and analyse the residuals. Residuals tell us how far away a point is from the regression line. For linear models, the main assumption is that the errors are independent and normally distributed. If our data fits that assumption, we should see that:
+
+  - the residuals are symmetric above and below 0;
+  - we don't see any patterns in the residuals as the predictive values increase;
+  - most of the points are close to 0, and there are fewer points with higher magnitude of residual.
+
+Whilst you can plot residuals in Python quite easily, it's hard to beat the quality of graphics you can achieve with {ggplot2} in R. So we include a final R code block to plot the residuals:
+
+```{r}
+#| label: plotting
+#| echo: true
+#| output-location: slide
+#| message: false
+#| fig-align: center
+#| fig-alt: "Scatter plot of preidcted and residual values for the fitted linear model"
+library(reticulate)
+library(ggplot2)
+lemur_residuals <- py$lemur_data_py
+ggplot(data = lemur_residuals, mapping = aes(x = Predicted, y = Residuals)) +
+  geom_point(colour = "#2F4F4F") +
+  geom_hline(yintercept = 0, colour = "red") +
+  theme(
+    panel.background = element_rect(fill = "#eaf2f2", colour = "#eaf2f2"),
+    plot.background = element_rect(fill = "#eaf2f2", colour = "#eaf2f2")
+    )
+```
+Here, we used `py$` to import our data and specify that we want to use `lemur_data_py` from our Python code block.
+
+The residuals look okay - they're not great. It looks like there's still some unaccounted-for trend for lemurs with smaller predicted weights. Maybe they're not growing at a linear rate. It also looks like there is an increase in variation for lemurs with large predicted weights. Iw ould be useful to go back and try a few other models, but we leave that for another day.
+
+### How does it work?
+
+Since the document starts with an R code block, the engine used to render the document will be knitr. The rest of this document assumes we are using a knitr engine, so if you've specified a Jupyter engine instead, this method won't work.
+
+If you're rendering a Quarto document that contains only Python code blocks, it will render using a Jupyter engine. That's not what's happening here. Here, the code block is still being rendered using knitr, but it knows to use {reticulate} to run the code when it finds a Python code block. In the Python code block, we accessed the data from the R code block using `r.lemur_data`. The `.r` is the key element here - it tells {reticulate} to look in the R code for an object called `lemur_data` and use that.
+
+In the final R code block, we do something sort of similar to `py$lemur_data_py`. Here, we use `py$` to specify that we want to use `lemur_data_py` from the Python code block. You'll notice that we also need to explicitly call `library(reticulate)` for this to work (or use `reticulate::py`) - since it's an R code block, {knitr} doesn't know that it needs to use {reticulate} without telling it to.
+
+### Additional resources
+
+You can use {reticulate} outside of Quarto (an R Markdown) documents, including to run Python code form the console in RStudio. 
+
+### Attribution
+
+    Combining R and Python with {reticulate} and Quarto.
+    Nicola Rennie. January 6, 2023.
+    nrennie.rbind.io/blog/combining-r-and-python-with-reticulate-and-quarto

@@ -1,0 +1,273 @@
+---
+title: "Creating template files with R"
+author: "Nicola Rennie"
+format: html
+editor: visual
+---
+
+## Creating template files with R
+
+If you find yourself regularly copying and pasting content between files, you can use R to do it for you! For repetitive tasks you can't fully automate, using template files is a great way to save time and this blog post will show you how to make them in R.
+
+If you participate in the [#TidyTuesday](https://github.com/rfordatascience/tidytuesday) challenge, you will repeat the same tasks every week: load packages, load data, data wrangling, make a plot, save the plot, and so on. You're likely to end up copying and pasting the script from the previous week and then removing the unnecessary parts. And you'll do the same thing with the README files for GitHub - there's (almost) always a title, a `.png` file with the final chart, and a `.gif` file (recorded with {camcorder}) showing the evolution of the chart.
+
+### Creating folders and files
+
+For each week, we want a folder with the name format `yyyy-mm-dd` nested inside a *year* folder with the format `yyyy`, and inside that folder we want a `.R` file with a name in the format `yyyymmdd.R` and the `README.md` file.
+
+  Note: It wasn't always this organised and I lament the days of my **dd-mm-yyyy** file naming and how difficult it still is to find things ....
+
+All of these folders an files can be constructed based on the date alone. We're eventually going to build a function with the date as an argument (called `date_chr`). Let's start by defining a date as a variable, then extracting the year and the date (without the `-` separators) from it.
+
+```{r}
+#| label: date_chr
+#| echo: true
+#| message: false
+date_chr <- Sys.Date()
+yr <- sub(pattern = "-.*", replacement = "", x = date_chr)
+date_strip <- stringr::str_remove_all(string = date_chr, pattern = "-")
+```
+
+Assuming that we're in the directory where we want to create folders (e.g. the root of your `#TidyTuesday` repository), then we can make the *year* and *week* folders if they don't already exist.
+
+```{r}
+#| label: new_folder
+#| echo: true
+#| message: true
+new_folder <- file.path(yr, date_chr)
+
+if (!file.exists(new_folder)) {
+  dir.create(path = new_folder, recursive = TRUE)
+  message("Created new folder")
+}
+```
+Here, the `recursive = TRUE` argument means that all elements of the path e.g. both the `yyyy` and the nested `yyyy-mm-dd` folders are created if they need to be. Once we have folders, it's time to add some (empty) files! Let's create a `.R` file named `yyyymmdd.R`, making sure we check if it exists first to avoid accidentally overwriting any existing work. We can also optionally return a message to say the file has successfully been created.
+
+```{r}
+#| label: new_file
+#| echo: true
+#| message: true
+new_file <- file.path(yr, date_chr, paste0(date_strip, ".R"))
+
+if (!file.exists(new_file)) {
+  file.create(new_file)
+  message("Created '.R' file")
+}
+```
+We can do the same for the `README.md` file:
+
+```{r}
+#| label: new_readme
+#| echo: true
+#| message: true
+new_readme <- file.path(yr, date_chr, "README.md")
+
+if (!file.exists(new_readme)) {
+  file.create(new_readme)
+  message("Created 'README.md' file")
+}
+```
+Now let's put some things into those files...
+
+### Creating a template README file
+
+Let's start with a template for the `README.md` file since it's a bit simpler. An example of one of my README files looks like this:
+
+```{html}
+<h1 algin="center"> Refugees </h1>
+  
+<p align="center">
+  <img src="/yyyy/yyyy-mm-dd/yyyymmdd.png" width="60%">
+</p>
+  
+  The making of this visualization was also recorded using the {camcorder} package.
+
+<p align="center">
+  <img src="/yyyy/yyyy-mm-dd/yyyymmdd.gif" width="60%">
+</p>
+```
+
+Here, we're using HTML code rather than just Markdown since GitHub understands it, and it gives us a bit more control over how the images and text appear. Let's generalize this and replace the specific dates with variables:
+
+```{html}
+<h1 align="center"> Title </h1>
+  
+<p align="center">
+  <img src="/yr/date_chr/date_strip.png" width="60%">
+</p>
+  
+The making of this visualization was also recorded using the {camcorder} package.
+
+<p align="center">
+  <img src="/yr/date_chr/date_strip.gif" width="60%">  
+</p>
+```
+
+We can save this as a `readme-template.md` file. If you plan to add this into an R package, you can save this file in the `inst` folder. Otherwise, keep it somewhere that you know where it is, e.g. in a `utils`folder in your `#TidyTuesday` repository. Now we want to copy the contents of this template file, replace the `yr`, `date_chr`, and `date_strip` variables with the actual values, and write to our newly created `README.md` file:
+
+```{r}
+#| label: README
+#| echo: true
+#| message: true
+
+# copy lines to README file
+readme_txt <- readLines("readme-template.md")
+
+# replace placeholder text with variables
+readme_txt <- gsub(pattern = "yr", replacement = yr, x = readme_txt)
+readme_txt <- gsub(pattern = "date_chr", replacement = date_chr, x = readme_txt)
+readme_txt <- gsub(pattern = "date_strip", replacement = date_strip, x = readme_txt)
+
+# write to file
+writeLines(text = readme_txt, con = new_readme)
+message("'README.md' contents copied")
+```
+
+### Creating a template `.R` file
+
+The process for creating, copying and writing the `.R` file will be similar to the README template process. Let's start by creating a file `r-template.R`. This will be very specific to your use case, and here it's a file that has evolved over several `#TidyTuesday` contributions. In this file, we'll
+
+  - load packages that we use often
+  - load fonts we commonly use
+  - read in the data
+  - set up the {camcorder} recording
+  - create code block sections for tasks we do each week
+
+Again, like the README file, instead of hard-coding any date values, we'll replace them with the `yr`, `date_chr`, and `date_strip` variables:
+
+```{r}
+#| label: r_template
+#| echo: true
+#| message: true
+
+# Load packages ----
+
+library(tidyverse)
+library(showtext)
+library(patchwork)
+library(camcorder)
+library(ggtext)
+library(nrBrand)
+library(glue)
+
+
+# Load data ----
+
+tuesdata <- tidytuesdayR::tt_load(date_chr)
+
+
+# Load fonts ----
+
+font_add_google("Roboto", "roboto")
+showtext_auto()
+
+
+# Define colors ----
+
+bg_color <- ""
+text_col <- ""
+highlight_col <- ""
+
+
+# Data wrangling ----
+
+
+# Start recording ----
+gg_record(
+  dir = file.path(yr, date_chr, "recording"),
+  device = "png",
+  width = 7,
+  height = 5,
+  units = "in",
+  dpi = 300
+)
+
+
+# Define text ----
+
+social <- nrBrand::social_caption(
+  bg_colour = bg_col,
+  icon_colour = highlight_col,
+  font_colour = text_col,
+  font_family = "roboto"
+)
+
+title <- ""
+st <- ""
+cap <- paste0(
+  "**Data**: <br>, social"
+)
+
+
+# Plot ----
+
+
+## Save gif ----
+
+gg_playback(
+  name = file.path(yr, date_chr, paste0(date_strip, ".gif")),
+  first_image_duration = 4,
+  last_image_duration = 20,
+  frame_duration = 0.25,
+  background = bg_col
+)
+```
+
+Setting up comment sections in R files is helpful for structuring your code in a modular way - it also means your code is partly pre-commented. Here we've loaded a personal R package, {nrBrand}, that writes the plot caption with social media icons. This topic is covered in another blog post. Using the `tidytuesdayR::tt_load()` function, which takes a date as input, means you can automatically load the data.
+
+Now we do the same thing as before: and copy the contents of this template file, edit to change the variable values, and write the `.R` file we already created:
+
+```{r}
+#| label: copy_lines
+#| echo: true
+#| message: true
+
+# copy lines to .R file
+r_txt <- readLines("r-template.R")
+
+# replace placeholder text with variables
+r_txt <- gsub(pattern = "yr", replacement = paste0("\"", yr, "\""), x = r_txt)
+r_txt <- gsub(pattern = "date_chr", replacement = paste0("\"", date_chr, "\""), x = r_txt)
+r_txt <- gsub(pattern = "date_strip", replacement = paste0("\"", date_strip, "\""), x = r_txt)
+
+# write to new file
+writeLines(text = r_txt, con = new_file)
+message("'.R' contents copied")
+```
+
+The only thing that's different about this code is the `replacement` argument. Here, we want to make sure that we copy with quotation marks, not just the variable value. For example, we want to replace `date_chr` with `"yyyy-mm-dd"` not `yyyy-mm-dd`.
+
+### Building a function
+
+Although we could leave all this code in a script, it will be easier to use if we wrap it into a function. There are a couple things to keep in mind:
+
+  - place the code where you read, modify, and write the template files to your new files inside the `if` statement that checks if the file already exists. You don't want to overwrite any existing files if you put in the wrong date.
+  
+  - check that the date is in the correct format sicne this will save some headaches with crating files with the wrong name:
+
+```{r}
+#| label: check_input
+#| echo: true
+#| message: true
+
+# check date in correct format
+if (is.na(as.Date(date_chr, format = "%Y-%m-%d"))) {
+  stop("'date_chr' in incorrect format. Should be yyyy-mm-dd.")
+}
+```
+
+  - when you start making R functions, you usually need somewhere to put them - an R package is a great place to keep them! You can store the template files in the `inst` folder, and then access them again later with `readLines(system.file("r-template.R"), package = "pkgname"))`.
+  
+  - sometimes you can use a similar workflow but create different outputs, such as animations, that would require a different README layout, hence we've left the README creation as an optional task with a `readme = TRUE` default argument.
+
+### Additional resources
+
+The {usethis} package has a `use_rmarkdown_template()` function for adding your own custom RMarkdown templates if you'd prefer `.Rmd`files instead of `.R` files.
+
+If you're interested in automating parts of your workflows, look into GitHub Actions. You can read about how to use GitHub Actions to refresh data and redeploy a Shiny app on a schedule in another blog post.
+
+### Attribution
+
+    Creating template files with R.
+    Nicola Rennie. August 22, 2023.
+    nrennie.rbind.io/blog/script-templates-r
